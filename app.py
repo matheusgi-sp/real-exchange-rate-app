@@ -122,6 +122,109 @@ CSV_COLUMNS = [
     "Real_Index",
 ]
 
+# ----------------------------------------------------------------------------
+# Design tokens (Kellogg / Northwestern palette)
+# ----------------------------------------------------------------------------
+PURPLE = "#4E2A84"
+LIGHT_PURPLE = "#E4E0EE"
+MID_PURPLE = "#836EAA"
+TEXT = "#1A1A1A"
+NOMINAL_GRAY = "#716C6B"
+REF_GRAY = "#9A9A9A"
+GRID = "#ECEAF2"
+FONT_FAMILY = '"Source Sans Pro", "Source Sans 3", -apple-system, "Segoe UI", Roboto, sans-serif'
+
+CUSTOM_CSS = f"""
+<style>
+.block-container {{
+    padding-top: 2.2rem;
+    padding-bottom: 3rem;
+    max-width: 1400px;
+}}
+h1, h2, h3 {{ color: {PURPLE}; }}
+
+/* Header */
+.app-header {{
+    border-bottom: 3px solid {PURPLE};
+    padding-bottom: 0.6rem;
+    margin-bottom: 1.4rem;
+}}
+.app-header h1 {{
+    margin: 0;
+    padding: 0;
+    font-size: 2.1rem;
+    font-weight: 700;
+    color: {PURPLE};
+}}
+.app-header p {{
+    margin: 0.25rem 0 0 0;
+    color: {TEXT};
+    opacity: 0.8;
+    font-size: 1.05rem;
+}}
+
+/* Metric cards */
+[data-testid="stMetric"] {{
+    background: {LIGHT_PURPLE};
+    border-left: 5px solid {PURPLE};
+    border-radius: 10px;
+    padding: 14px 18px;
+    height: 100%;
+}}
+[data-testid="stMetricValue"] {{
+    color: {PURPLE};
+    font-weight: 700;
+}}
+[data-testid="stMetricLabel"] p {{
+    color: {TEXT};
+    font-weight: 600;
+}}
+
+/* Sidebar */
+[data-testid="stSidebar"] h2, [data-testid="stSidebar"] h3 {{
+    color: {PURPLE};
+}}
+.range-note {{
+    background: #FFFFFF;
+    border: 1px solid {LIGHT_PURPLE};
+    border-left: 4px solid {PURPLE};
+    border-radius: 8px;
+    padding: 8px 12px;
+    font-size: 0.92rem;
+    color: {TEXT};
+    margin-top: 0.3rem;
+}}
+.range-note b {{ color: {PURPLE}; }}
+
+/* Interpretation caption */
+.interpretation {{
+    background: {LIGHT_PURPLE};
+    border-radius: 8px;
+    padding: 10px 14px;
+    color: {TEXT};
+    font-size: 0.95rem;
+}}
+
+/* Tabs */
+.stTabs [data-baseweb="tab-list"] {{ gap: 1.2rem; }}
+.stTabs [aria-selected="true"] {{ color: {PURPLE}; font-weight: 600; }}
+
+/* Download button */
+.stDownloadButton button {{
+    font-weight: 600;
+    padding: 0.6rem 1.4rem;
+}}
+
+/* Mobile */
+@media (max-width: 640px) {{
+    .block-container {{ padding-left: 0.9rem; padding-right: 0.9rem; padding-top: 1.2rem; }}
+    .app-header h1 {{ font-size: 1.55rem; }}
+    .app-header p {{ font-size: 0.95rem; }}
+    [data-testid="stMetricValue"] {{ font-size: 1.45rem; }}
+}}
+</style>
+"""
+
 
 class IMFDataError(Exception):
     """Raised when the IMF API cannot be reached or returns unusable content."""
@@ -396,6 +499,11 @@ def fmt_month(d: pd.Timestamp) -> str:
     return d.strftime("%Y-%m")
 
 
+def fmt_label(d: pd.Timestamp) -> str:
+    """Slider/display label, e.g. 'Jan 1976'."""
+    return d.strftime("%b %Y")
+
+
 def coverage_table(items: list[tuple[str, str, pd.Series, str]]) -> pd.DataFrame:
     rows = []
     for label, country, series, source in items:
@@ -405,7 +513,7 @@ def coverage_table(items: list[tuple[str, str, pd.Series, str]]) -> pd.DataFrame
         elif series is None or series.empty:
             first, last, n = "no data", "no data", 0
         else:
-            first, last, n = fmt_month(series.index.min()), fmt_month(series.index.max()), len(series)
+            first, last, n = fmt_label(series.index.min()), fmt_label(series.index.max()), len(series)
         rows.append(
             {
                 "Series": label,
@@ -420,8 +528,15 @@ def coverage_table(items: list[tuple[str, str, pd.Series, str]]) -> pd.DataFrame
 
 
 def render_coverage(table: pd.DataFrame) -> None:
-    st.subheader("Data coverage")
-    st.dataframe(table, hide_index=True)
+    st.markdown("#### Data coverage")
+    st.dataframe(table, hide_index=True, width="stretch")
+
+
+def swap_countries() -> None:
+    st.session_state["country1"], st.session_state["country2"] = (
+        st.session_state["country2"],
+        st.session_state["country1"],
+    )
 
 
 def make_chart(w: pd.DataFrame, mode: str, c1: str, c2: str) -> go.Figure:
@@ -432,34 +547,43 @@ def make_chart(w: pd.DataFrame, mode: str, c1: str, c2: str) -> go.Figure:
         y=[100, 100],
         mode="lines",
         name="100 = window average",
-        line=dict(color="gray", dash="dash", width=1),
+        line=dict(color=REF_GRAY, dash="dash", width=1.2),
         hoverinfo="skip",
     )
+
+    # Tooltip: date (unified hover header) + S + Real Index.
+    if mode == "Both":
+        real_hover = "Real Index: %{y:.2f}<extra></extra>"
+        nom_hover = "S: %{y:.6g}<extra></extra>"
+    else:
+        real_hover = "Real Index: %{y:.2f}<br>S: %{customdata:.6g}<extra></extra>"
+        nom_hover = "S: %{y:.6g}<br>Real Index: %{customdata:.2f}<extra></extra>"
+
     real = go.Scatter(
         x=x,
         y=w["Real_Index"],
+        customdata=w["S"],
         mode="lines",
         name="Real Index",
-        line=dict(color="#1f77b4", width=2),
-        hovertemplate="Real Index: %{y:.2f}<extra></extra>",
+        line=dict(color=PURPLE, width=2.4),
+        hovertemplate=real_hover,
     )
     nominal = go.Scatter(
         x=x,
         y=w["S"],
+        customdata=w["Real_Index"],
         mode="lines",
         name=f"S(t): {nominal_label}",
-        line=dict(color="#d62728", width=2),
-        hovertemplate="S: %{y:.6g}<extra></extra>",
+        line=dict(color=NOMINAL_GRAY, width=2),
+        hovertemplate=nom_hover,
     )
 
     if mode == "Real":
         fig = go.Figure([real, reference])
         fig.update_yaxes(title_text="Real Index (window average = 100)")
-        title = f"Real exchange rate index: {c1} vs {c2}"
     elif mode == "Nominal":
         fig = go.Figure([nominal])
         fig.update_yaxes(title_text=nominal_label)
-        title = f"Nominal exchange rate S(t): {nominal_label}"
     else:
         fig = make_subplots(specs=[[{"secondary_y": True}]])
         fig.add_trace(real, secondary_y=False)
@@ -467,41 +591,90 @@ def make_chart(w: pd.DataFrame, mode: str, c1: str, c2: str) -> go.Figure:
         fig.add_trace(nominal, secondary_y=True)
         fig.update_yaxes(title_text="Real Index (window average = 100)", secondary_y=False)
         fig.update_yaxes(title_text=nominal_label, secondary_y=True, showgrid=False)
-        title = f"Real Index and nominal S(t): {c1} vs {c2}"
 
-    fig.update_xaxes(title_text="Month")
+    fig.update_xaxes(
+        showgrid=True,
+        gridcolor=GRID,
+        linecolor="#CFCAD9",
+        hoverformat="%b %Y",
+        zeroline=False,
+    )
+    fig.update_yaxes(gridcolor=GRID, linecolor="#CFCAD9", zeroline=False)
     fig.update_layout(
-        title=title,
-        height=540,
+        height=550,
         hovermode="x unified",
-        legend=dict(orientation="h", yanchor="top", y=-0.18, xanchor="left", x=0),
-        margin=dict(l=60, r=60, t=60, b=60),
+        paper_bgcolor="#FFFFFF",
+        plot_bgcolor="#FFFFFF",
+        font=dict(family=FONT_FAMILY, size=14, color=TEXT),
+        hoverlabel=dict(bgcolor="#FFFFFF", bordercolor=PURPLE, font=dict(family=FONT_FAMILY, size=13)),
+        legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="left", x=0, bgcolor="rgba(0,0,0,0)"),
+        margin=dict(l=10, r=10, t=40, b=10),
     )
     return fig
+
+
+def render_methodology() -> None:
+    st.markdown("**Nominal exchange rate** (Country 2 currency per 1 unit of Country 1 currency):")
+    st.latex(r"S(t) = \frac{FX_2(t)}{FX_1(t)}")
+    st.caption("FX_i(t) = IMF local-currency units per USD (period average). For the United States, FX = 1.")
+    st.markdown("**Real exchange rate**, with P1 and P2 the monthly CPI indices:")
+    st.latex(r"RER(t) = S(t) \times \frac{P_1(t)}{P_2(t)}")
+    st.markdown("**Benchmark**: arithmetic mean of RER over the N valid months in the selected window:")
+    st.latex(r"RER^{*} = \frac{1}{N}\sum_{t \in \text{window}} RER(t)")
+    st.markdown("**Real Index**, which averages exactly 100 over the window:")
+    st.latex(r"\text{Real Index}(t) = 100 \times \frac{RER(t)}{RER^{*}}")
+    st.markdown(
+        "Valid months are months where S, P1 and P2 all exist and are positive. "
+        "Gaps are dropped; nothing is interpolated or forward-filled.  \n"
+        "**Data:** IMF SDMX 3.0 API (`api.imf.org/external/sdmx/3.0`), dataflows `CPI` "
+        "(key `{ISO3}.CPI._T.IX.M`) and `ER` (key `{ISO3}.XDC_USD.PA_RT.M`). Euro Area = `G163`."
+    )
 
 
 # ----------------------------------------------------------------------------
 # App
 # ----------------------------------------------------------------------------
 def main() -> None:
-    st.set_page_config(page_title="Real Exchange Rate Explorer", page_icon="💱", layout="wide")
-    st.title("Real Exchange Rate Explorer")
+    st.set_page_config(
+        page_title="Real Exchange Rate Explorer",
+        page_icon="💱",
+        layout="wide",
+        initial_sidebar_state="expanded",
+    )
+    st.markdown(CUSTOM_CSS, unsafe_allow_html=True)
     st.markdown(
-        "**RER(t) = S(t) × P1(t) / P2(t)**, where S(t) is units of Country 2 currency per "
-        "1 unit of Country 1 currency and P1, P2 are monthly CPI indices. "
-        "Real Index(t) = 100 × RER(t) / RER*, with RER* the mean RER over the selected window. "
-        "Data: IMF SDMX 3.0 API (CPI and ER dataflows)."
+        '<div class="app-header"><h1>💱 Real Exchange Rate Explorer</h1>'
+        "<p>Compare two currencies in real terms: CPI-adjusted exchange rates from IMF data, "
+        "indexed to their average over the period you choose.</p></div>",
+        unsafe_allow_html=True,
     )
 
+    # Default selections (kept in session state so the swap button can flip them).
+    st.session_state.setdefault("country1", "United Kingdom")
+    st.session_state.setdefault("country2", "United States")
+
     with st.sidebar:
-        st.header("Settings")
-        c1 = st.selectbox("Country 1", COUNTRY_NAMES, index=COUNTRY_NAMES.index("United Kingdom"))
-        c2 = st.selectbox("Country 2", COUNTRY_NAMES, index=COUNTRY_NAMES.index("United States"))
-        date_box = st.container()
-        mode = st.radio("Chart mode", ["Real", "Nominal", "Both"], index=0)
+        st.subheader("Countries")
+        c1 = st.selectbox("Country 1", COUNTRY_NAMES, key="country1")
+        c2 = st.selectbox("Country 2", COUNTRY_NAMES, key="country2")
+        st.button("⇅  Swap countries", on_click=swap_countries, width="stretch")
+
+        st.divider()
+        st.subheader("Sample period")
+        period_box = st.container()
+
+        st.divider()
+        st.subheader("Chart")
+        mode = st.radio(
+            "Chart mode",
+            ["Real", "Nominal", "Both"],
+            index=0,
+            horizontal=True,
+            help="Real: Real Index vs. 100. Nominal: S(t) in currency units. Both: two y-axes.",
+        )
 
     if c1 == c2:
-        st.warning("Country 1 and Country 2 are the same. Please choose two different countries.")
+        st.warning("Country 1 and Country 2 are the same. Please choose two different countries.", icon="⚠️")
         return
 
     iso1, iso2 = COUNTRIES[c1], COUNTRIES[c2]
@@ -513,7 +686,10 @@ def main() -> None:
             p1, p1_src = get_cpi(iso1)
             p2, p2_src = get_cpi(iso2)
     except IMFDataError as exc:
-        st.error(f"IMF API problem: {exc} The API may be temporarily unavailable; please try again later.")
+        st.error(
+            f"IMF API problem: {exc} The API may be temporarily unavailable; please try again later.",
+            icon="🚫",
+        )
         return
 
     coverage = coverage_table(
@@ -536,7 +712,7 @@ def main() -> None:
         missing.append(f"IMF returned no CPI data for {c2}.")
     if missing:
         for msg in missing:
-            st.error(msg)
+            st.error(msg, icon="🚫")
         render_coverage(coverage)
         return
 
@@ -544,31 +720,34 @@ def main() -> None:
     if df.empty:
         st.warning(
             f"No overlapping months where exchange rates and CPI are available and positive "
-            f"for both {c1} and {c2}."
+            f"for both {c1} and {c2}.",
+            icon="⚠️",
         )
         render_coverage(coverage)
         return
 
     months = list(df.index)
-    with date_box:
-        start = st.selectbox(
-            "Start month", months, index=0, format_func=fmt_month, key=f"start_{iso1}_{iso2}"
-        )
-        end = st.selectbox(
-            "End month", months, index=len(months) - 1, format_func=fmt_month, key=f"end_{iso1}_{iso2}"
-        )
+    with period_box:
+        if len(months) > 1:
+            start, end = st.select_slider(
+                "Months",
+                options=months,
+                value=(months[0], months[-1]),
+                format_func=fmt_label,
+                key=f"range_{iso1}_{iso2}",
+                label_visibility="collapsed",
+            )
+        else:
+            start = end = months[0]
+        range_note = st.empty()
         st.caption(
-            f"Overlapping data: {fmt_month(months[0])} to {fmt_month(months[-1])} "
-            f"({len(months)} valid months; months with gaps are excluded)."
+            f"Overlapping data available: {fmt_label(months[0])} – {fmt_label(months[-1])}. "
+            "Months with gaps are excluded."
         )
-
-    if start > end:
-        st.warning("Start month is after end month. Please adjust the date range.")
-        return
 
     window = df.loc[start:end].copy()
     if window.empty:
-        st.warning("There are no valid months in the selected window.")
+        st.warning("There are no valid months in the selected window.", icon="⚠️")
         render_coverage(coverage)
         return
 
@@ -576,25 +755,86 @@ def main() -> None:
     window["RER_star"] = rer_star
     window["Real_Index"] = 100.0 * window["RER"] / rer_star
 
+    range_note.markdown(
+        f'<div class="range-note"><b>{fmt_label(window.index[0])} – {fmt_label(window.index[-1])}</b>'
+        f"<br>{len(window)} valid months</div>",
+        unsafe_allow_html=True,
+    )
+
+    # (a) Metric cards
+    latest = float(window["Real_Index"].iloc[-1])
     m1, m2, m3, m4 = st.columns(4)
-    m1.metric("RER*", f"{rer_star:.6g}")
-    m2.metric("Valid months", f"{len(window)}")
-    m3.metric("First / last valid month", f"{fmt_month(window.index[0])} / {fmt_month(window.index[-1])}")
-    m4.metric("Mean Real Index", f"{window['Real_Index'].mean():.2f}")
+    m1.metric("RER*", f"{rer_star:.6g}", help="Mean RER over the valid months in the window.")
+    m2.metric(
+        "Valid months",
+        f"{len(window)}",
+        help=f"{fmt_label(window.index[0])} – {fmt_label(window.index[-1])}",
+    )
+    m3.metric("Mean Real Index", f"{window['Real_Index'].mean():.2f}", help="100.00 by construction.")
+    m4.metric(
+        f"Latest Real Index ({fmt_label(window.index[-1])})",
+        f"{latest:.2f}",
+        delta=f"{latest - 100:+.2f} vs. average",
+        delta_color="off",
+    )
 
-    st.plotly_chart(make_chart(window, mode, c1, c2))
-    st.caption(f"{CAPTION} (Country 1 = {c1}; Country 2 = {c2}.)")
+    st.write("")
 
-    render_coverage(coverage)
+    # (b) Chart
+    with st.container(border=True):
+        titles = {
+            "Real": f"Real exchange rate index — {c1} vs {c2}",
+            "Nominal": f"Nominal exchange rate S(t) — {c2} currency per 1 {c1} currency",
+            "Both": f"Real Index and nominal S(t) — {c1} vs {c2}",
+        }
+        st.markdown(f"#### {titles[mode]}")
+        st.plotly_chart(
+            make_chart(window, mode, c1, c2),
+            width="stretch",
+            theme=None,
+            config={"displaylogo": False, "responsive": True},
+        )
 
+    # (c) Interpretation
+    st.markdown(
+        f'<div class="interpretation">{CAPTION} '
+        f"<i>(Country 1 = {c1}; Country 2 = {c2}.)</i></div>",
+        unsafe_allow_html=True,
+    )
+
+    st.divider()
+
+    # (d) Tabs
     out = window.reset_index()
     out["date"] = out["date"].dt.strftime("%Y-%m-%d")
+    tab_data, tab_cov, tab_method = st.tabs(["Data", "Coverage", "Methodology"])
+    with tab_data:
+        st.dataframe(
+            out[CSV_COLUMNS],
+            hide_index=True,
+            width="stretch",
+            height=420,
+            column_config={
+                "date": st.column_config.TextColumn("date"),
+                "Real_Index": st.column_config.NumberColumn("Real_Index", format="%.2f"),
+            },
+        )
+        st.caption("Table display may round; the CSV download keeps full precision.")
+    with tab_cov:
+        render_coverage(coverage)
+    with tab_method:
+        render_methodology()
+
+    st.write("")
+
+    # (e) Download
     csv_bytes = out[CSV_COLUMNS].to_csv(index=False).encode("utf-8")  # full float precision
     st.download_button(
-        "Download CSV (valid observations in window)",
+        "⬇  Download CSV (valid observations in window)",
         data=csv_bytes,
         file_name=f"rer_{iso1}_{iso2}_{fmt_month(window.index[0])}_{fmt_month(window.index[-1])}.csv",
         mime="text/csv",
+        type="primary",
     )
 
 
@@ -604,5 +844,6 @@ if __name__ == "__main__":
     except Exception as exc:  # never show a raw traceback
         st.error(
             f"Something went wrong while building the page: {exc.__class__.__name__}: {exc}. "
-            "Please try another selection or reload later."
+            "Please try another selection or reload later.",
+            icon="🚫",
         )
