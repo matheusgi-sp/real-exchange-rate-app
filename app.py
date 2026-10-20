@@ -170,6 +170,20 @@ h1, h2, h3 {{ color: {PURPLE}; }}
     border-radius: 10px;
     padding: 14px 18px;
     height: 100%;
+    min-height: 118px;
+    box-sizing: border-box;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+}}
+/* Make the four metric columns stretch to the same height */
+[data-testid="stHorizontalBlock"]:has([data-testid="stMetric"]) {{
+    align-items: stretch;
+}}
+[data-testid="stHorizontalBlock"]:has([data-testid="stMetric"]) [data-testid="stColumn"] > div,
+[data-testid="stHorizontalBlock"]:has([data-testid="stMetric"]) [data-testid="stVerticalBlock"],
+[data-testid="stHorizontalBlock"]:has([data-testid="stMetric"]) [data-testid="stElementContainer"] {{
+    height: 100%;
 }}
 [data-testid="stMetricValue"] {{
     color: {PURPLE};
@@ -646,7 +660,7 @@ def main() -> None:
     )
     st.markdown(CUSTOM_CSS, unsafe_allow_html=True)
     st.markdown(
-        '<div class="app-header"><h1>💱 Real Exchange Rate Explorer</h1>'
+        '<div class="app-header"><h1>Real Exchange Rate Explorer</h1>'
         "<p>Compare two currencies in real terms: CPI-adjusted exchange rates from IMF data, "
         "indexed to their average over the period you choose.</p></div>",
         unsafe_allow_html=True,
@@ -775,9 +789,9 @@ def main() -> None:
     )
     m3.metric("Mean Real Index", f"{window['Real_Index'].mean():.2f}", help="100.00 by construction.")
     m4.metric(
-        f"Latest Real Index ({fmt_label(window.index[-1])})",
+        "Latest Real Index",
         f"{latest:.2f}",
-        delta=f"{latest - 100:+.2f} vs. average",
+        delta=f"{latest - 100:+.2f} vs. avg ({fmt_label(window.index[-1])})",
         delta_color="off",
     )
 
