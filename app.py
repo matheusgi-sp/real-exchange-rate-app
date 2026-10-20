@@ -587,74 +587,31 @@ def make_chart(w: pd.DataFrame, mode: str, c1: str, c2: str) -> go.Figure:
         hovertemplate=nom_hover,
     )
 
-    # Display only: if S(t) spans more than two orders of magnitude (e.g. currency
-    # redenominations), draw its axis on a log scale so the series stays readable.
-    s_pos = w["S"][w["S"] > 0]
-    s_log = len(s_pos) > 1 and (s_pos.max() / s_pos.min()) > 100
-    s_axis = dict(
-        type="log" if s_log else "linear",
-        exponentformat="power" if s_log else "none",
-        tickformat="" if s_log else "~g",
-    )
-    s_title = nominal_label + (" (log scale)" if s_log else "")
-    real_title = "Real Index (avg = 100)"
-
-    axis_title_font = dict(size=12, color="#4A4A4A")
-    tick_font = dict(size=11, color="#4A4A4A")
-
+    # Layout restored to the original version; only line colors use the Kellogg palette.
     if mode == "Real":
         fig = go.Figure([real, reference])
-        fig.update_yaxes(title_text=real_title)
+        fig.update_yaxes(title_text="Real Index (window average = 100)")
+        title = f"Real exchange rate index: {c1} vs {c2}"
     elif mode == "Nominal":
         fig = go.Figure([nominal])
-        fig.update_yaxes(title_text=s_title, **s_axis)
+        fig.update_yaxes(title_text=nominal_label)
+        title = f"Nominal exchange rate S(t): {nominal_label}"
     else:
         fig = make_subplots(specs=[[{"secondary_y": True}]])
         fig.add_trace(real, secondary_y=False)
         fig.add_trace(reference, secondary_y=False)
         fig.add_trace(nominal, secondary_y=True)
-        fig.update_yaxes(title_text=real_title, secondary_y=False)
-        fig.update_yaxes(title_text=s_title, secondary_y=True, showgrid=False, **s_axis)
+        fig.update_yaxes(title_text="Real Index (window average = 100)", secondary_y=False)
+        fig.update_yaxes(title_text=nominal_label, secondary_y=True, showgrid=False)
+        title = f"Real Index and nominal S(t): {c1} vs {c2}"
 
-    fig.update_xaxes(
-        showgrid=True,
-        gridcolor=GRID,
-        linecolor="#CFCAD9",
-        hoverformat="%b %Y",
-        zeroline=False,
-        tickfont=tick_font,
-        automargin=True,
-        ticks="outside",
-        ticklen=4,
-        tickcolor="#CFCAD9",
-    )
-    fig.update_yaxes(
-        gridcolor=GRID,
-        linecolor="#CFCAD9",
-        zeroline=False,
-        tickfont=tick_font,
-        title_font=axis_title_font,
-        title_standoff=8,
-        automargin=True,
-    )
+    fig.update_xaxes(title_text="Month", hoverformat="%b %Y")
     fig.update_layout(
-        height=520,
+        title=title,
+        height=540,
         hovermode="x unified",
-        paper_bgcolor="#FFFFFF",
-        plot_bgcolor="#FFFFFF",
-        font=dict(family=FONT_FAMILY, size=12, color=TEXT),
-        hoverlabel=dict(bgcolor="#FFFFFF", bordercolor=PURPLE, font=dict(family=FONT_FAMILY, size=12)),
-        legend=dict(
-            orientation="h",
-            yanchor="bottom",
-            y=1.01,
-            xanchor="left",
-            x=0,
-            bgcolor="rgba(0,0,0,0)",
-            font=dict(size=12),
-            itemwidth=30,
-        ),
-        margin=dict(l=8, r=8, t=36, b=8),
+        legend=dict(orientation="h", yanchor="top", y=-0.18, xanchor="left", x=0),
+        margin=dict(l=60, r=60, t=60, b=60),
     )
     return fig
 
@@ -828,16 +785,9 @@ def main() -> None:
 
     # (b) Chart
     with st.container(border=True):
-        titles = {
-            "Real": f"Real exchange rate index — {c1} vs {c2}",
-            "Nominal": f"Nominal exchange rate S(t) — {c2} currency per 1 {c1} currency",
-            "Both": f"Real Index and nominal S(t) — {c1} vs {c2}",
-        }
-        st.markdown(f'<div class="chart-title">{titles[mode]}</div>', unsafe_allow_html=True)
         st.plotly_chart(
             make_chart(window, mode, c1, c2),
             width="stretch",
-            theme=None,
             config={"displaylogo": False, "responsive": True},
         )
 
